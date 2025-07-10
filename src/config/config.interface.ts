@@ -2,13 +2,14 @@ export interface AppConfig {
   env: string;
   port: number;
   cronService: ServiceConfig;
+  network: string;
 }
 
 export interface StellarNetworkConfig {
-  network: string;
   networkPassphrase: string;
   rpcUrl: string;
   walletSecretKey: string;
+  walletPublicKey: string;
   contracts: ContractsConfig;
   cronExpression: string;
 }

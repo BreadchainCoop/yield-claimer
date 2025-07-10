@@ -1,29 +1,35 @@
 import { Buffer } from "buffer";
-import { Address } from '@stellar/stellar-sdk';
-import {
-  AssembledTransaction,
-  Client as ContractClient,
-  ClientOptions as ContractClientOptions,
-  MethodOptions,
-  Result,
-  Spec as ContractSpec,
-} from '@stellar/stellar-sdk/contract';
-import type {
-  u32,
-  i32,
-  u64,
-  i64,
-  u128,
-  i128,
-  u256,
-  i256,
-  Option,
-  Typepoint,
-  Duration,
-} from '@stellar/stellar-sdk/contract';
+import * as StellarSdk from '@stellar/stellar-sdk';
+
+const { Address } = StellarSdk;
+
+// Re-export the contract module types
+export type AssembledTransaction<T> = StellarSdk.contract.AssembledTransaction<T>;
+export type ContractClient = StellarSdk.contract.Client;
+export type ContractSpec = StellarSdk.contract.Spec;
+export type ContractClientOptions = StellarSdk.contract.ClientOptions;
+export type MethodOptions = StellarSdk.contract.MethodOptions;
+export type Result<T, E extends StellarSdk.contract.ErrorMessage = StellarSdk.contract.ErrorMessage> = StellarSdk.contract.Result<T, E>;
+export type u32 = StellarSdk.contract.u32;
+export type i32 = StellarSdk.contract.i32;
+export type u64 = StellarSdk.contract.u64;
+export type i64 = StellarSdk.contract.i64;
+export type u128 = StellarSdk.contract.u128;
+export type i128 = StellarSdk.contract.i128;
+export type u256 = StellarSdk.contract.u256;
+export type i256 = StellarSdk.contract.i256;
+export type Option<T> = StellarSdk.contract.Option<T>;
+export type Typepoint = StellarSdk.contract.Typepoint;
+export type Duration = StellarSdk.contract.Duration;
+
+// Use the classes directly
+const AssembledTransaction = StellarSdk.contract.AssembledTransaction;
+const ContractClient = StellarSdk.contract.Client;
+const ContractSpec = StellarSdk.contract.Spec;
+
 export * from '@stellar/stellar-sdk'
-export * as contract from '@stellar/stellar-sdk/contract'
-export * as rpc from '@stellar/stellar-sdk/rpc'
+export const contract = StellarSdk.contract;
+export const rpc = StellarSdk.rpc;
 
 if (typeof window !== 'undefined') {
   //@ts-ignore Buffer exists
@@ -503,26 +509,5 @@ export class Client extends ContractClient {
         "AAAABAAAALdFcnJvciBjb2RlcyBmb3IgdGhlIGN1c2RfbWFuYWdlciBjb250cmFjdC4gQ29tbW9uIGVycm9ycyBhcmUgY29kZXMgdGhhdCBtYXRjaCB1cCB3aXRoIHRoZSBidWlsdC1pbgpZaWVsZERpc3RyaWJ1dG9yRXJyb3IgZXJyb3IgcmVwb3J0aW5nLiBZaWVsZERpc3RyaWJ1dG9yIHNwZWNpZmljIGVycm9ycyBzdGFydCBhdCA0MDAAAAAAAAAAABVZaWVsZERpc3RyaWJ1dG9yRXJyb3IAAAAAAAAIAAAAAAAAAA1JbnRlcm5hbEVycm9yAAAAAAAAAQAAAAAAAAAXQWxyZWFkeUluaXRpYWxpemVkRXJyb3IAAAAAAwAAAAAAAAARVW5hdXRob3JpemVkRXJyb3IAAAAAAAAEAAAAAAAAABNOZWdhdGl2ZUFtb3VudEVycm9yAAAAAAgAAAAAAAAADEJhbGFuY2VFcnJvcgAAAAoAAAAAAAAADU92ZXJmbG93RXJyb3IAAAAAAAAMAAAAAAAAABNNZW1iZXJBbHJlYWR5RXhpc3RzAAAABLAAAAAAAAAAEk1lbWJlckRvZXNOb3RFeGlzdAAAAAAEsQ==" ]),
       options
     )
-  }
-  public readonly fromJSON = {
-    set_yield_controller: this.txFromJSON<null>,
-        add_member: this.txFromJSON<null>,
-        remove_member: this.txFromJSON<null>,
-        list_members: this.txFromJSON<Array<string>>,
-        set_treasury: this.txFromJSON<null>,
-        get_treasury: this.txFromJSON<string>,
-        set_treasury_share: this.txFromJSON<null>,
-        get_treasury_share: this.txFromJSON<u32>,
-        set_distribution_period: this.txFromJSON<null>,
-        get_distribution_period: this.txFromJSON<u64>,
-        get_next_distribution_time: this.txFromJSON<u64>,
-        time_before_next_distribution: this.txFromJSON<u64>,
-        is_distribution_available: this.txFromJSON<boolean>,
-        distribute_yield: this.txFromJSON<i128>,
-        get_distribution_info: this.txFromJSON<Distribution>,
-        get_distribution_history: this.txFromJSON<Array<Distribution>>,
-        set_admin: this.txFromJSON<null>,
-        get_yield_controller: this.txFromJSON<string>,
-        get_total_distributed: this.txFromJSON<i128>
   }
 }

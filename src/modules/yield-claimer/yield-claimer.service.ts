@@ -1,24 +1,51 @@
+import { StellarNetworkConfig } from '@/config/config.interface';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { StellarService } from '../stellar/stellar.service';
+import { rpc, contract } from '@stellar/stellar-sdk';
+import * as YieldDistributor from '@/packages/yield_distributor/src';
+import * as YieldController from '@/packages/lending_yield_controller/src';
 
 @Injectable()
 export class YieldClaimerService {
   private readonly logger = new Logger(YieldClaimerService.name);
-  private readonly yieldDistributorId: string;
-  private readonly lendingYieldControllerId: string;
+  private readonly network: string;
+  private readonly yieldDistributorClient: YieldDistributor.Client;
+  private readonly yieldControllerClient: YieldController.Client;
+  private readonly signer: {
+    signTransaction: contract.SignTransaction;
+    signAuthEntry: contract.SignAuthEntry;
+  };
   private isProcessing = false;
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly stellarService: StellarService,
   ) {
-    this.yieldDistributorId = this.configService.get<string>('contracts.yieldDistributorId');
-    this.lendingYieldControllerId = this.configService.get<string>('contracts.lendingYieldControllerId');
+    this.network = this.configService.get<string>('network')
+    const config = this.configService.get<StellarNetworkConfig>(`cronService.${this.network}`);
+    const keypair = YieldController.Keypair.fromSecret(config.walletSecretKey);
+    const nodeSigner = contract.basicNodeSigner(keypair, config.rpcUrl);
+    this.signer = {
+      signTransaction: nodeSigner.signTransaction,
+      signAuthEntry: nodeSigner.signAuthEntry,
+    };
+    this.yieldDistributorClient = new YieldDistributor.Client({
+      contractId: config.contracts.yieldDistributorId,
+      networkPassphrase: config.networkPassphrase,
+      rpcUrl: config.rpcUrl,
+      allowHttp: true,
+      publicKey: config.walletPublicKey,
+    });
+    this.yieldControllerClient = new YieldController.Client({
+      contractId: config.contracts.lendingYieldControllerId,
+      networkPassphrase: config.networkPassphrase,
+      rpcUrl: config.rpcUrl,
+      allowHttp: true,
+      publicKey: config.walletPublicKey,
+    });
 
-    if (!this.yieldDistributorId || !this.lendingYieldControllerId) {
-      throw new Error('Contract IDs are required');
+    if (!this.yieldDistributorClient || !this.yieldControllerClient) {
+      throw new Error('Contract clients are required');
     }
   }
 
@@ -49,10 +76,10 @@ export class YieldClaimerService {
       // Claim yield
       const claimedAmount = await this.claimYield();
       
-      if (claimedAmount > 0) {
+      if (claimedAmount) {
         this.logger.log(`Successfully claimed yield: ${claimedAmount}`);
       } else {
-        this.logger.warn('No yield was claimed (amount = 0)');
+        this.logger.warn('No yield was claimed');
       }
     } catch (error) {
       this.logger.error('Error during yield claim process:', error);
@@ -63,11 +90,8 @@ export class YieldClaimerService {
 
   async checkDistributionAvailability(): Promise<boolean> {
     try {
-      const isAvailable = await this.stellarService.simulateContract(
-        this.yieldDistributorId,
-        'is_distribution_available'
-      );
-      return isAvailable;
+      const contractCall: contract.AssembledTransaction<boolean> = await this.yieldDistributorClient.is_distribution_available();
+      return contractCall.result.valueOf();
     } catch (error) {
       this.logger.error('Error checking distribution availability:', error);
       throw error;
@@ -76,26 +100,88 @@ export class YieldClaimerService {
 
   async getTimeBeforeNextDistribution(): Promise<number> {
     try {
-      const timeRemaining = await this.stellarService.simulateContract(
-        this.yieldDistributorId,
-        'time_before_next_distribution'
-      );
-      return Number(timeRemaining);
+      const contractCall = await this.yieldDistributorClient.time_before_next_distribution();
+      return Number(contractCall.result.valueOf());
     } catch (error) {
       this.logger.error('Error getting time before next distribution:', error);
       return 0;
     }
   }
 
-  async claimYield(): Promise<number> {
+
+
+  async claimYield(): Promise<string | undefined> {
     try {
-      const claimedAmount = await this.stellarService.callContract(
-        this.lendingYieldControllerId,
-        'claim_yield'
-      );
-      return Number(claimedAmount ?? 0);
+      const claimOp = await this.yieldControllerClient.claim_yield({
+      simulate: true 
+      });
+      if (claimOp.simulation) {
+        if(rpc.Api.isSimulationError(claimOp.simulation)) {
+          throw new Error(claimOp.simulation.error);
+        }
+        if (rpc.Api.isSimulationRestore(claimOp.simulation)) {
+          await claimOp.restoreFootprint(claimOp.simulation.restorePreamble);
+          return await this.claimYield(); // Recursive call after restore
+        }
+        if (rpc.Api.isSimulationSuccess(claimOp.simulation)) {
+          const response = await claimOp.signAndSend({ signTransaction: this.signer.signTransaction });
+          return response.sendTransactionResponse?.hash;
+        }
+      }
+      return undefined;
     } catch (error) {
       this.logger.error('Error claiming yield:', error);
+      throw error;
+    }
+  }
+
+  async getDistributionDetails(): Promise<YieldDistributor.Distribution> {
+    try {
+      const contractCall: contract.AssembledTransaction<YieldDistributor.Distribution> = await this.yieldDistributorClient.get_distribution_info();
+      return contractCall.result;
+    } catch (error) { 
+      this.logger.error('Error getting distribution info:', error);
+      throw error;
+    }
+  }
+
+
+  async getTreasuryShare(): Promise<string> {
+    try {
+      const contractCall: contract.AssembledTransaction<number> = await this.yieldDistributorClient.get_treasury_share();
+      return parseFloat(((Number(contractCall.result.valueOf()) / 10000) * 100).toString()).toFixed(3);
+    } catch (error) {
+      this.logger.error('Error getting treasury share:', error);
+      throw error;
+    }
+  }
+
+  async getTotalDistributed(): Promise<string> {
+    try {
+      const contractCall = await this.yieldDistributorClient.get_total_distributed();
+      return contractCall.result.valueOf().toString();
+    } catch (error) {
+      this.logger.error('Error getting total distributed:', error);
+      throw error;
+    }
+  }
+
+  async getDistributionPeriod(): Promise<string> {
+    try {
+      const contractCall = await this.yieldDistributorClient.get_distribution_period();
+      return contractCall.result.valueOf().toString();
+    } catch (error) {
+      this.logger.error('Error getting distribution period:', error);
+      throw error;
+    }
+  }
+
+  async getNextDistributionTime(): Promise<string> {
+    try {
+      const contractCall = await this.yieldDistributorClient.get_next_distribution_time();
+      return contractCall.result.valueOf().toString();
+    } catch (error) {
+      this.logger.error('Error getting next distribution time:', error);
       throw error;
     }
   }
@@ -107,19 +193,17 @@ export class YieldClaimerService {
         timeRemaining,
         distributionPeriod,
         nextDistributionTime,
-        currentRound,
-        totalMembers,
+        distributionDetails,
         treasuryShare,
         totalDistributed,
       ] = await Promise.all([
         this.checkDistributionAvailability(),
         this.getTimeBeforeNextDistribution(),
-        this.stellarService.simulateContract(this.yieldDistributorId, 'get_distribution_period'),
-        this.stellarService.simulateContract(this.yieldDistributorId, 'get_next_distribution_time'),
-        this.stellarService.simulateContract(this.yieldDistributorId, 'get_distribution_info'),
-        this.stellarService.simulateContract(this.yieldDistributorId, 'list_members'),
-        this.stellarService.simulateContract(this.yieldDistributorId, 'get_treasury_share'),
-        this.stellarService.simulateContract(this.yieldDistributorId, 'get_total_distributed'),
+        this.getDistributionPeriod(),
+        this.getNextDistributionTime(),
+        this.getDistributionDetails(),
+        this.getTreasuryShare(),
+        this.getTotalDistributed(),
       ]);
 
       return {
@@ -127,10 +211,9 @@ export class YieldClaimerService {
         timeRemaining: Number(timeRemaining),
         distributionPeriod: Number(distributionPeriod),
         nextDistributionTime: Number(nextDistributionTime),
-        currentRound,
-        totalMembers: totalMembers ? totalMembers.length : 0,
-        treasuryShareBps: Number(treasuryShare),
-        totalDistributed: Number(totalDistributed),
+        distributionDetails,
+        treasuryPercent: treasuryShare,
+        totalDistributed: BigInt(totalDistributed.toString()) / BigInt(10 ** 7),
       };
     } catch (error) {
       this.logger.error('Error getting distribution info:', error);

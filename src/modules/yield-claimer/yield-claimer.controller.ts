@@ -16,9 +16,7 @@ export class YieldClaimerController {
           timeUntilNext: `${info.timeRemaining} seconds`,
           nextDistributionTime: new Date(info.nextDistributionTime * 1000).toISOString(),
           distributionPeriod: `${info.distributionPeriod} seconds`,
-          currentRound: info.currentRound,
-          totalMembers: info.totalMembers,
-          treasuryShare: `${info.treasuryShareBps / 100}%`,
+          treasuryShare: `${info.treasuryPercent}%`,
           totalDistributed: info.totalDistributed,
         },
       };
