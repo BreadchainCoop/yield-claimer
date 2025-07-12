@@ -213,7 +213,7 @@ export class YieldClaimerService {
         nextDistributionTime: Number(nextDistributionTime),
         distributionDetails,
         treasuryPercent: treasuryShare,
-        totalDistributed: BigInt(totalDistributed.toString()) / BigInt(10 ** 7),
+        totalDistributed: (BigInt(totalDistributed.toString()) / BigInt(10 ** 7)).toString(),
       };
     } catch (error) {
       this.logger.error('Error getting distribution info:', error);
