@@ -70,46 +70,7 @@ importers:
         specifier: ^5.99.9
         version: 5.99.9
 
-  packages/blend_capital_adapter:
-    dependencies:
-      '@stellar/stellar-sdk':
-        specifier: ^13.x
-        version: 13.3.0
-      buffer:
-        specifier: 6.0.3
-        version: 6.0.3
-    devDependencies:
-      typescript:
-        specifier: ^5.6.2
-        version: 5.8.3
-
-  packages/cusd_manager:
-    dependencies:
-      '@stellar/stellar-sdk':
-        specifier: ^13.x
-        version: 13.3.0
-      buffer:
-        specifier: 6.0.3
-        version: 6.0.3
-    devDependencies:
-      typescript:
-        specifier: ^5.6.2
-        version: 5.8.3
-
   packages/lending_yield_controller:
-    dependencies:
-      '@stellar/stellar-sdk':
-        specifier: ^13.x
-        version: 13.3.0
-      buffer:
-        specifier: 6.0.3
-        version: 6.0.3
-    devDependencies:
-      typescript:
-        specifier: ^5.6.2
-        version: 5.8.3
-
-  packages/yield_adapter_registry:
     dependencies:
       '@stellar/stellar-sdk':
         specifier: ^13.x
