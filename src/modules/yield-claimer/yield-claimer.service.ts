@@ -50,7 +50,7 @@ export class YieldClaimerService {
     }
   }
 
-  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_10_SECONDS)
+  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_12_HOURS)
   async handleYieldClaim() {
     if (this.isProcessing) {
       this.logger.debug('Yield claim already in progress, skipping...');
