@@ -26,7 +26,7 @@ export default (): AppConfig => ({
       walletPublicKey: process.env.WALLET_PUBLIC_KEY,
       contracts: {
         yieldDistributorId: "CDRAYSJCXZRHGHSKL6HNXSPXJFLI3W3BPHYSPRJ4XJPY2IDMIT5M6WML",
-        lendingYieldControllerId:"8fe5fd2c83d89ca070746d8ff55d749196909452cf442dcd46630dc0fcae2537",
+        lendingYieldControllerId:"CB2RILXU4W7EO7TDHAQMU6CXMSMSK7WIICKOB2BDFBYBF6K5XEYN335D",
       },
       cronExpression: CronExpression.EVERY_DAY_AT_MIDNIGHT,
     },
