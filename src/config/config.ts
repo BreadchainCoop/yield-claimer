@@ -25,10 +25,10 @@ export default (): AppConfig => ({
       walletSecretKey: process.env.WALLET_SECRET_KEY,
       walletPublicKey: process.env.WALLET_PUBLIC_KEY,
       contracts: {
-        yieldDistributorId: "",
-        lendingYieldControllerId: "",
+        yieldDistributorId: "CDRAYSJCXZRHGHSKL6HNXSPXJFLI3W3BPHYSPRJ4XJPY2IDMIT5M6WML",
+        lendingYieldControllerId:"8fe5fd2c83d89ca070746d8ff55d749196909452cf442dcd46630dc0fcae2537",
       },
-      cronExpression: CronExpression.EVERY_30_SECONDS,
+      cronExpression: CronExpression.EVERY_DAY_AT_MIDNIGHT,
     },
   },
 });
