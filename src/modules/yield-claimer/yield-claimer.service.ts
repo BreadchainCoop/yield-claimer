@@ -1,7 +1,7 @@
 import { StellarNetworkConfig } from '@/config/config.interface';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { rpc, contract } from '@stellar/stellar-sdk';
 import * as YieldDistributor from '@/packages/yield_distributor/src';
 import * as YieldController from '@/packages/lending_yield_controller/src';
@@ -50,7 +50,7 @@ export class YieldClaimerService {
     }
   }
 
-  @Cron(process.env.CRON_EXPRESSION)
+  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_10_SECONDS)
   async handleYieldClaim() {
     if (this.isProcessing) {
       this.logger.debug('Yield claim already in progress, skipping...');
