@@ -1,7 +1,7 @@
 import { StellarNetworkConfig } from '@/config/config.interface';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { rpc, contract } from '@stellar/stellar-sdk';
 import * as YieldDistributor from '@/packages/yield_distributor/src';
 import * as YieldController from '@/packages/lending_yield_controller/src';
@@ -22,6 +22,7 @@ export class YieldClaimerService {
     private readonly configService: ConfigService,
   ) {
     this.network = this.configService.get<string>('network')
+
     const config = this.configService.get<StellarNetworkConfig>(`cronService.${this.network}`);
     const keypair = YieldController.Keypair.fromSecret(config.walletSecretKey);
     const nodeSigner = contract.basicNodeSigner(keypair, config.rpcUrl);
@@ -49,7 +50,7 @@ export class YieldClaimerService {
     }
   }
 
-  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_30_SECONDS)
+  @Cron(process.env.CRON_EXPRESSION)
   async handleYieldClaim() {
     if (this.isProcessing) {
       this.logger.debug('Yield claim already in progress, skipping...');
@@ -63,8 +64,8 @@ export class YieldClaimerService {
       
       // Check if distribution is available
       const isDistributionAvailable = await this.checkDistributionAvailability();
-      
-      if (!isDistributionAvailable) {
+      const timeRemaining = await this.getTimeBeforeNextDistribution();
+      if (!(isDistributionAvailable && timeRemaining == 0)) {
         this.logger.debug('Distribution not yet available');
         const timeRemaining = await this.getTimeBeforeNextDistribution();
         this.logger.debug(`Time until next distribution: ${timeRemaining} seconds`);
