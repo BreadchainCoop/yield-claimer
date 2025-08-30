@@ -5,7 +5,7 @@ import { Networks } from '@stellar/stellar-sdk';
 
 export default (): AppConfig => ({
   env: process.env.NODE_ENV || 'development',
-  network: process.env.NETWORK || 'TESTNET',
+  network: process.env.NETWORK?.toUpperCase() || 'TESTNET',
   port: parseInt(process.env.PORT, 10) || 3001,
   cronService: {
     TESTNET: {
