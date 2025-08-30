@@ -21,8 +21,8 @@ export default (): AppConfig => ({
     },
     PUBLIC: {
       networkPassphrase: Networks.PUBLIC,
-      rpcUrl: process.env.STELLAR_RPC_URL || 'https://mainnet.sorobanrpc.com',
-      walletSecretKey: process.env.WALLET_SECRET_KEY,
+      rpcUrl: process.env.STELLAR_RPC_URL || 'https://horizon.stellar.lobstr.co',
+      walletSecretKey: process.env.WALLET_SECRET_KEY, 
       walletPublicKey: process.env.WALLET_PUBLIC_KEY,
       contracts: {
         yieldDistributorId: "CDRAYSJCXZRHGHSKL6HNXSPXJFLI3W3BPHYSPRJ4XJPY2IDMIT5M6WML",

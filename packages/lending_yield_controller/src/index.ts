@@ -1,35 +1,31 @@
 import { Buffer } from "buffer";
-import * as StellarSdk from '@stellar/stellar-sdk';
+const StellarSDK = require('@stellar/stellar-sdk');
+const { Address, contract, rpc } = StellarSDK;
+const AssembledTransaction = contract.AssembledTransaction;
+const ContractClient = contract.Client;
+const ContractClientOptions = contract.ClientOptions;
+const MethodOptions = contract.MethodOptions;
+const Result = contract.Result;
+const ContractSpec = contract.Spec;
 
-const { Address } = StellarSdk;
+type AssembledTransaction<T> = InstanceType<typeof AssembledTransaction>;
+type ContractClientOptions = typeof ContractClientOptions;
+type MethodOptions = typeof MethodOptions;
 
-// Re-export the contract module types
-export type AssembledTransaction<T> = StellarSdk.contract.AssembledTransaction<T>;
-export type ContractClient = StellarSdk.contract.Client;
-export type ContractSpec = StellarSdk.contract.Spec;
-export type ContractClientOptions = StellarSdk.contract.ClientOptions;
-export type MethodOptions = StellarSdk.contract.MethodOptions;
-export type Result<T, E extends StellarSdk.contract.ErrorMessage = StellarSdk.contract.ErrorMessage> = StellarSdk.contract.Result<T, E>;
-export type u32 = StellarSdk.contract.u32;
-export type i32 = StellarSdk.contract.i32;
-export type u64 = StellarSdk.contract.u64;
-export type i64 = StellarSdk.contract.i64;
-export type u128 = StellarSdk.contract.u128;
-export type i128 = StellarSdk.contract.i128;
-export type u256 = StellarSdk.contract.u256;
-export type i256 = StellarSdk.contract.i256;
-export type Option<T> = StellarSdk.contract.Option<T>;
-export type Typepoint = StellarSdk.contract.Typepoint;
-export type Duration = StellarSdk.contract.Duration;
-
-// Use the classes directly
-const AssembledTransaction = StellarSdk.contract.AssembledTransaction;
-const ContractClient = StellarSdk.contract.Client;
-const ContractSpec = StellarSdk.contract.Spec;
+type u32 = any;
+type i32 = any;
+type u64 = any;
+type i64 = any;
+type u128 = any;
+type i128 = any;
+type u256 = any;
+type i256 = any;
+type Option<T> = T | undefined;
+type Typepoint = any;
+type Duration = any;
 
 export * from '@stellar/stellar-sdk'
-export const contract = StellarSdk.contract;
-export const rpc = StellarSdk.rpc;
+export { contract, rpc }
 
 if (typeof window !== 'undefined') {
   //@ts-ignore Buffer exists

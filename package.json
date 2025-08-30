@@ -37,7 +37,7 @@
     "@stellar/stellar-sdk": "^13.3.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
-    "contract": "link:@stellar/stellar-sdk/contract",
+    "contract": "link:@types/@stellar/stellar-sdk/contract",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   }
