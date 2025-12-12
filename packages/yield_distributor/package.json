@@ -1,14 +1,13 @@
 {
   "version": "0.0.0",
   "name": "yield_distributor",
-  "type": "module",
   "exports": "./dist/index.js",
   "typings": "dist/index.d.ts",
   "scripts": {
     "build": "tsc"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "^13.x",
+    "@stellar/stellar-sdk": "^14.4.2",
     "buffer": "6.0.3"
   },
   "devDependencies": {

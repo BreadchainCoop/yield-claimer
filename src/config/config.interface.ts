@@ -22,4 +22,6 @@ export interface ServiceConfig {
 export interface ContractsConfig {
   yieldDistributorId: string;
   lendingYieldControllerId: string;
+  protocol: string;
+  assetId: string;
 }

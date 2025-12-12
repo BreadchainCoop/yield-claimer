@@ -1,31 +1,29 @@
 import { Buffer } from "buffer";
-const StellarSDK = require('@stellar/stellar-sdk');
-const { Address, contract, rpc } = StellarSDK;
-const AssembledTransaction = contract.AssembledTransaction;
-const ContractClient = contract.Client;
-const ContractClientOptions = contract.ClientOptions;
-const MethodOptions = contract.MethodOptions;
-const Result = contract.Result;
-const ContractSpec = contract.Spec;
-
-type AssembledTransaction<T> = InstanceType<typeof AssembledTransaction>;
-type ContractClientOptions = typeof ContractClientOptions;
-type MethodOptions = typeof MethodOptions;
-
-type u32 = any;
-type i32 = any;
-type u64 = any;
-type i64 = any;
-type u128 = any;
-type i128 = any;
-type u256 = any;
-type i256 = any;
-type Option<T> = T | undefined;
-type Typepoint = any;
-type Duration = any;
-
+import { Address } from '@stellar/stellar-sdk';
+import {
+  AssembledTransaction,
+  Client as ContractClient,
+  ClientOptions as ContractClientOptions,
+  MethodOptions,
+  Result,
+  Spec as ContractSpec,
+} from '@stellar/stellar-sdk/contract';
+import type {
+  u32,
+  i32,
+  u64,
+  i64,
+  u128,
+  i128,
+  u256,
+  i256,
+  Option,
+  Typepoint,
+  Duration,
+} from '@stellar/stellar-sdk/contract';
 export * from '@stellar/stellar-sdk'
-export { contract, rpc }
+export * as contract from '@stellar/stellar-sdk/contract'
+export * as rpc from '@stellar/stellar-sdk/rpc'
 
 if (typeof window !== 'undefined') {
   //@ts-ignore Buffer exists
@@ -478,6 +476,26 @@ export interface Client {
     simulate?: boolean;
   }) => Promise<AssembledTransaction<i128>>
 
+  /**
+   * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  upgrade: ({new_wasm_hash}: {new_wasm_hash: Buffer}, options?: {
+    /**
+     * The fee to pay for the transaction. Default: BASE_FEE
+     */
+    fee?: number;
+
+    /**
+     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+     */
+    timeoutInSeconds?: number;
+
+    /**
+     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+     */
+    simulate?: boolean;
+  }) => Promise<AssembledTransaction<null>>
+
 }
 export class Client extends ContractClient {
   static async deploy<T = Client>(
@@ -519,6 +537,7 @@ export class Client extends ContractClient {
         "AAAAAAAAAAAAAAAJc2V0X2FkbWluAAAAAAAAAQAAAAAAAAAJbmV3X2FkbWluAAAAAAAAEwAAAAA=",
         "AAAAAAAAAAAAAAAUZ2V0X3lpZWxkX2NvbnRyb2xsZXIAAAAAAAAAAQAAABM=",
         "AAAAAAAAAAAAAAAVZ2V0X3RvdGFsX2Rpc3RyaWJ1dGVkAAAAAAAAAAAAAAEAAAAL",
+        "AAAAAAAAAAAAAAAHdXBncmFkZQAAAAABAAAAAAAAAA1uZXdfd2FzbV9oYXNoAAAAAAAD7gAAACAAAAAA",
         "AAAAAQAAAAAAAAAAAAAAEkRpc3RyaWJ1dGlvbkNvbmZpZwAAAAAAAgAAAAAAAAATZGlzdHJpYnV0aW9uX3BlcmlvZAAAAAAGAAAAAAAAABJ0cmVhc3VyeV9zaGFyZV9icHMAAAAAAAQ=",
         "AAAAAQAAAAAAAAAAAAAABk1lbWJlcgAAAAAAAwAAAAAAAAAGYWN0aXZlAAAAAAABAAAAAAAAAAdhZGRyZXNzAAAAABMAAAAAAAAACWpvaW5lZF9hdAAAAAAAAAY=",
         "AAAAAQAAAAAAAAAAAAAADERpc3RyaWJ1dGlvbgAAAAgAAAAAAAAAGmRpc3RyaWJ1dGlvbl9lbmRfdGltZXN0YW1wAAAAAAAGAAAAAAAAABNkaXN0cmlidXRpb25fbWVtYmVyAAAAAAsAAAAAAAAAHGRpc3RyaWJ1dGlvbl9zdGFydF90aW1lc3RhbXAAAAAGAAAAAAAAABJkaXN0cmlidXRpb25fdG90YWwAAAAAAAsAAAAAAAAAFWRpc3RyaWJ1dGlvbl90cmVhc3VyeQAAAAAAAAsAAAAAAAAABWVwb2NoAAAAAAAABgAAAAAAAAAMaXNfcHJvY2Vzc2VkAAAAAQAAAAAAAAAHbWVtYmVycwAAAAPqAAAAEw==",

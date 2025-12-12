@@ -1,31 +1,29 @@
 import { Buffer } from "buffer";
-const StellarSDK = require('@stellar/stellar-sdk');
-const { Address, contract, rpc } = StellarSDK;
-const AssembledTransaction = contract.AssembledTransaction;
-const ContractClient = contract.Client;
-const ContractClientOptions = contract.ClientOptions;
-const MethodOptions = contract.MethodOptions;
-const Result = contract.Result;
-const ContractSpec = contract.Spec;
-
-type AssembledTransaction<T> = InstanceType<typeof AssembledTransaction>;
-type ContractClientOptions = typeof ContractClientOptions;
-type MethodOptions = typeof MethodOptions;
-
-type u32 = any;
-type i32 = any;
-type u64 = any;
-type i64 = any;
-type u128 = any;
-type i128 = any;
-type u256 = any;
-type i256 = any;
-type Option<T> = T | undefined;
-type Typepoint = any;
-type Duration = any;
-
+import { Address } from '@stellar/stellar-sdk';
+import {
+  AssembledTransaction,
+  Client as ContractClient,
+  ClientOptions as ContractClientOptions,
+  MethodOptions,
+  Result,
+  Spec as ContractSpec,
+} from '@stellar/stellar-sdk/contract';
+import type {
+  u32,
+  i32,
+  u64,
+  i64,
+  u128,
+  i128,
+  u256,
+  i256,
+  Option,
+  Typepoint,
+  Duration,
+} from '@stellar/stellar-sdk/contract';
 export * from '@stellar/stellar-sdk'
-export { contract, rpc }
+export * as contract from '@stellar/stellar-sdk/contract'
+export * as rpc from '@stellar/stellar-sdk/rpc'
 
 if (typeof window !== 'undefined') {
   //@ts-ignore Buffer exists
@@ -35,7 +33,27 @@ if (typeof window !== 'undefined') {
 
 
 
-export type DataKey = {tag: "Owner", values: void} | {tag: "Admin", values: void} | {tag: "CUSDManager", values: void} | {tag: "AdapterRegistry", values: void} | {tag: "YieldDistributor", values: void};
+/**
+ * State of a pending harvest operation
+ */
+export enum HarvestState {
+  None = 0,
+  Harvested = 1,
+  Recompounded = 2,
+}
+
+
+/**
+ * Pending harvest data stored between multi-stage operations
+ */
+export interface PendingHarvest {
+  amount: i128;
+  asset: string;
+  protocol: string;
+  state: HarvestState;
+}
+
+export type DataKey = {tag: "Owner", values: void} | {tag: "Admin", values: void} | {tag: "CUSDManager", values: void} | {tag: "AdapterRegistry", values: void} | {tag: "YieldDistributor", values: void} | {tag: "PendingHarvest", values: readonly [string, string]};
 
 /**
  * Error codes for the cusd_manager contract. Common errors are codes that match up with the built-in
@@ -49,7 +67,23 @@ export const LendingYieldControllerError = {
   10: {message:"BalanceError"},
   12: {message:"OverflowError"},
   1000: {message:"UnsupportedAsset"},
-  1001: {message:"YieldUnavailable"}
+  1001: {message:"YieldUnavailable"},
+  /**
+   * No pending harvest exists for this protocol/asset
+   */
+  1002: {message:"NoPendingHarvest"},
+  /**
+   * A harvest is already in progress for this protocol/asset
+   */
+  1003: {message:"HarvestAlreadyInProgress"},
+  /**
+   * Invalid harvest state for this operation
+   */
+  1004: {message:"InvalidHarvestState"},
+  /**
+   * No yield available to harvest
+   */
+  1005: {message:"NoYieldToHarvest"}
 }
 
 export type SupportedAdapter = {tag: "BlendCapital", values: void} | {tag: "Custom", values: readonly [string]};
@@ -100,27 +134,7 @@ export interface Client {
   /**
    * Construct and simulate a get_yield transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_yield: (options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<i128>>
-
-  /**
-   * Construct and simulate a claim_yield transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-   */
-  claim_yield: (options?: {
+  get_yield: ({protocol, asset}: {protocol: string, asset: string}, options?: {
     /**
      * The fee to pay for the transaction. Default: BASE_FEE
      */
@@ -318,9 +332,9 @@ export interface Client {
   }) => Promise<AssembledTransaction<null>>
 
   /**
-   * Construct and simulate a get_total_apy transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Construct and simulate a get_apy transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_total_apy: ({asset}: {asset: string}, options?: {
+  get_apy: ({protocol, asset}: {protocol: string, asset: string}, options?: {
     /**
      * The fee to pay for the transaction. Default: BASE_FEE
      */
@@ -338,9 +352,9 @@ export interface Client {
   }) => Promise<AssembledTransaction<u32>>
 
   /**
-   * Construct and simulate a get_weighted_total_apy transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_weighted_total_apy: (options?: {
+  upgrade: ({new_wasm_hash}: {new_wasm_hash: Buffer}, options?: {
     /**
      * The fee to pay for the transaction. Default: BASE_FEE
      */
@@ -355,7 +369,107 @@ export interface Client {
      * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
      */
     simulate?: boolean;
-  }) => Promise<AssembledTransaction<u32>>
+  }) => Promise<AssembledTransaction<null>>
+
+  /**
+   * Construct and simulate a harvest_yield transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  harvest_yield: ({protocol, asset}: {protocol: string, asset: string}, options?: {
+    /**
+     * The fee to pay for the transaction. Default: BASE_FEE
+     */
+    fee?: number;
+
+    /**
+     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+     */
+    timeoutInSeconds?: number;
+
+    /**
+     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+     */
+    simulate?: boolean;
+  }) => Promise<AssembledTransaction<i128>>
+
+  /**
+   * Construct and simulate a recompound_yield transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  recompound_yield: ({protocol, asset}: {protocol: string, asset: string}, options?: {
+    /**
+     * The fee to pay for the transaction. Default: BASE_FEE
+     */
+    fee?: number;
+
+    /**
+     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+     */
+    timeoutInSeconds?: number;
+
+    /**
+     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+     */
+    simulate?: boolean;
+  }) => Promise<AssembledTransaction<i128>>
+
+  /**
+   * Construct and simulate a finalize_distribution transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  finalize_distribution: ({protocol, asset}: {protocol: string, asset: string}, options?: {
+    /**
+     * The fee to pay for the transaction. Default: BASE_FEE
+     */
+    fee?: number;
+
+    /**
+     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+     */
+    timeoutInSeconds?: number;
+
+    /**
+     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+     */
+    simulate?: boolean;
+  }) => Promise<AssembledTransaction<i128>>
+
+  /**
+   * Construct and simulate a get_pending_harvest transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  get_pending_harvest: ({protocol, asset}: {protocol: string, asset: string}, options?: {
+    /**
+     * The fee to pay for the transaction. Default: BASE_FEE
+     */
+    fee?: number;
+
+    /**
+     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+     */
+    timeoutInSeconds?: number;
+
+    /**
+     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+     */
+    simulate?: boolean;
+  }) => Promise<AssembledTransaction<Option<PendingHarvest>>>
+
+  /**
+   * Construct and simulate a cancel_harvest transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  cancel_harvest: ({protocol, asset}: {protocol: string, asset: string}, options?: {
+    /**
+     * The fee to pay for the transaction. Default: BASE_FEE
+     */
+    fee?: number;
+
+    /**
+     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+     */
+    timeoutInSeconds?: number;
+
+    /**
+     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+     */
+    simulate?: boolean;
+  }) => Promise<AssembledTransaction<null>>
 
 }
 export class Client extends ContractClient {
@@ -377,12 +491,13 @@ export class Client extends ContractClient {
   }
   constructor(public readonly options: ContractClientOptions) {
     super(
-      new ContractSpec([ "AAAAAgAAAAAAAAAAAAAAB0RhdGFLZXkAAAAABQAAAAAAAAAAAAAABU93bmVyAAAAAAAAAAAAAAAAAAAFQWRtaW4AAAAAAAAAAAAAAAAAAAtDVVNETWFuYWdlcgAAAAAAAAAAAAAAAA9BZGFwdGVyUmVnaXN0cnkAAAAAAAAAAAAAAAAQWWllbGREaXN0cmlidXRvcg==",
+      new ContractSpec([ "AAAAAwAAACRTdGF0ZSBvZiBhIHBlbmRpbmcgaGFydmVzdCBvcGVyYXRpb24AAAAAAAAADEhhcnZlc3RTdGF0ZQAAAAMAAAASTm8gcGVuZGluZyBoYXJ2ZXN0AAAAAAAETm9uZQAAAAAAAAAyWWllbGQgaGFzIGJlZW4gaGFydmVzdGVkICh3aXRoZHJhd24gZnJvbSBwcm90b2NvbCkAAAAAAAlIYXJ2ZXN0ZWQAAAAAAAABAAAANllpZWxkIGhhcyBiZWVuIHJlY29tcG91bmRlZCAocmUtZGVwb3NpdGVkIHRvIHByb3RvY29sKQAAAAAADFJlY29tcG91bmRlZAAAAAI=",
+        "AAAAAQAAADpQZW5kaW5nIGhhcnZlc3QgZGF0YSBzdG9yZWQgYmV0d2VlbiBtdWx0aS1zdGFnZSBvcGVyYXRpb25zAAAAAAAAAAAADlBlbmRpbmdIYXJ2ZXN0AAAAAAAEAAAAAAAAAAZhbW91bnQAAAAAAAsAAAAAAAAABWFzc2V0AAAAAAAAEwAAAAAAAAAIcHJvdG9jb2wAAAARAAAAAAAAAAVzdGF0ZQAAAAAAB9AAAAAMSGFydmVzdFN0YXRl",
+        "AAAAAgAAAAAAAAAAAAAAB0RhdGFLZXkAAAAABgAAAAAAAAAAAAAABU93bmVyAAAAAAAAAAAAAAAAAAAFQWRtaW4AAAAAAAAAAAAAAAAAAAtDVVNETWFuYWdlcgAAAAAAAAAAAAAAAA9BZGFwdGVyUmVnaXN0cnkAAAAAAAAAAAAAAAAQWWllbGREaXN0cmlidXRvcgAAAAEAAAAyUGVuZGluZyBoYXJ2ZXN0IGZvciBhIHNwZWNpZmljIHByb3RvY29sL2Fzc2V0IHBhaXIAAAAAAA5QZW5kaW5nSGFydmVzdAAAAAAAAgAAABEAAAAT",
         "AAAAAAAAAAAAAAANX19jb25zdHJ1Y3RvcgAAAAAAAAUAAAAAAAAAEXlpZWxkX2Rpc3RyaWJ1dG9yAAAAAAAAEwAAAAAAAAAQYWRhcHRlcl9yZWdpc3RyeQAAABMAAAAAAAAADGN1c2RfbWFuYWdlcgAAABMAAAAAAAAABWFkbWluAAAAAAAAEwAAAAAAAAAFb3duZXIAAAAAAAATAAAAAA==",
         "AAAAAAAAAAAAAAASZGVwb3NpdF9jb2xsYXRlcmFsAAAAAAAEAAAAAAAAAAhwcm90b2NvbAAAABEAAAAAAAAABHVzZXIAAAATAAAAAAAAAAVhc3NldAAAAAAAABMAAAAAAAAABmFtb3VudAAAAAAACwAAAAEAAAAL",
         "AAAAAAAAAAAAAAATd2l0aGRyYXdfY29sbGF0ZXJhbAAAAAAEAAAAAAAAAAhwcm90b2NvbAAAABEAAAAAAAAABHVzZXIAAAATAAAAAAAAAAVhc3NldAAAAAAAABMAAAAAAAAABmFtb3VudAAAAAAACwAAAAEAAAAL",
-        "AAAAAAAAAAAAAAAJZ2V0X3lpZWxkAAAAAAAAAAAAAAEAAAAL",
-        "AAAAAAAAAAAAAAALY2xhaW1feWllbGQAAAAAAAAAAAEAAAAL",
+        "AAAAAAAAAAAAAAAJZ2V0X3lpZWxkAAAAAAAAAgAAAAAAAAAIcHJvdG9jb2wAAAARAAAAAAAAAAVhc3NldAAAAAAAABMAAAABAAAACw==",
         "AAAAAAAAAAAAAAANZ2V0X2VtaXNzaW9ucwAAAAAAAAIAAAAAAAAACHByb3RvY29sAAAAEQAAAAAAAAAFYXNzZXQAAAAAAAATAAAAAQAAAAs=",
         "AAAAAAAAAAAAAAAPY2xhaW1fZW1pc3Npb25zAAAAAAIAAAAAAAAACHByb3RvY29sAAAAEQAAAAAAAAAFYXNzZXQAAAAAAAATAAAAAQAAAAs=",
         "AAAAAAAAAAAAAAAVc2V0X3lpZWxkX2Rpc3RyaWJ1dG9yAAAAAAAAAQAAAAAAAAAReWllbGRfZGlzdHJpYnV0b3IAAAAAAAATAAAAAA==",
@@ -392,9 +507,14 @@ export class Client extends ContractClient {
         "AAAAAAAAAAAAAAAUZ2V0X2FkYXB0ZXJfcmVnaXN0cnkAAAAAAAAAAQAAABM=",
         "AAAAAAAAAAAAAAAQZ2V0X2N1c2RfbWFuYWdlcgAAAAAAAAABAAAAEw==",
         "AAAAAAAAAAAAAAAJc2V0X2FkbWluAAAAAAAAAQAAAAAAAAAJbmV3X2FkbWluAAAAAAAAEwAAAAA=",
-        "AAAAAAAAAAAAAAANZ2V0X3RvdGFsX2FweQAAAAAAAAEAAAAAAAAABWFzc2V0AAAAAAAAEwAAAAEAAAAE",
-        "AAAAAAAAAAAAAAAWZ2V0X3dlaWdodGVkX3RvdGFsX2FweQAAAAAAAAAAAAEAAAAE",
-        "AAAABAAAALhFcnJvciBjb2RlcyBmb3IgdGhlIGN1c2RfbWFuYWdlciBjb250cmFjdC4gQ29tbW9uIGVycm9ycyBhcmUgY29kZXMgdGhhdCBtYXRjaCB1cCB3aXRoIHRoZSBidWlsdC1pbgpMZW5kaW5nWWllbGRDb250cm9sbGVyRXJyb3IgZXJyb3IgcmVwb3J0aW5nLiBDVVNETWFuYWdlciBzcGVjaWZpYyBlcnJvcnMgc3RhcnQgYXQgMTAwAAAAAAAAABtMZW5kaW5nWWllbGRDb250cm9sbGVyRXJyb3IAAAAACAAAAAAAAAANSW50ZXJuYWxFcnJvcgAAAAAAAAEAAAAAAAAAF0FscmVhZHlJbml0aWFsaXplZEVycm9yAAAAAAMAAAAAAAAAEVVuYXV0aG9yaXplZEVycm9yAAAAAAAABAAAAAAAAAATTmVnYXRpdmVBbW91bnRFcnJvcgAAAAAIAAAAAAAAAAxCYWxhbmNlRXJyb3IAAAAKAAAAAAAAAA1PdmVyZmxvd0Vycm9yAAAAAAAADAAAAAAAAAAQVW5zdXBwb3J0ZWRBc3NldAAAA+gAAAAAAAAAEFlpZWxkVW5hdmFpbGFibGUAAAPp",
+        "AAAAAAAAAAAAAAAHZ2V0X2FweQAAAAACAAAAAAAAAAhwcm90b2NvbAAAABEAAAAAAAAABWFzc2V0AAAAAAAAEwAAAAEAAAAE",
+        "AAAAAAAAAAAAAAAHdXBncmFkZQAAAAABAAAAAAAAAA1uZXdfd2FzbV9oYXNoAAAAAAAD7gAAACAAAAAA",
+        "AAAAAAAAAAAAAAANaGFydmVzdF95aWVsZAAAAAAAAAIAAAAAAAAACHByb3RvY29sAAAAEQAAAAAAAAAFYXNzZXQAAAAAAAATAAAAAQAAAAs=",
+        "AAAAAAAAAAAAAAAQcmVjb21wb3VuZF95aWVsZAAAAAIAAAAAAAAACHByb3RvY29sAAAAEQAAAAAAAAAFYXNzZXQAAAAAAAATAAAAAQAAAAs=",
+        "AAAAAAAAAAAAAAAVZmluYWxpemVfZGlzdHJpYnV0aW9uAAAAAAAAAgAAAAAAAAAIcHJvdG9jb2wAAAARAAAAAAAAAAVhc3NldAAAAAAAABMAAAABAAAACw==",
+        "AAAAAAAAAAAAAAATZ2V0X3BlbmRpbmdfaGFydmVzdAAAAAACAAAAAAAAAAhwcm90b2NvbAAAABEAAAAAAAAABWFzc2V0AAAAAAAAEwAAAAEAAAPoAAAH0AAAAA5QZW5kaW5nSGFydmVzdAAA",
+        "AAAAAAAAAAAAAAAOY2FuY2VsX2hhcnZlc3QAAAAAAAIAAAAAAAAACHByb3RvY29sAAAAEQAAAAAAAAAFYXNzZXQAAAAAAAATAAAAAA==",
+        "AAAABAAAALhFcnJvciBjb2RlcyBmb3IgdGhlIGN1c2RfbWFuYWdlciBjb250cmFjdC4gQ29tbW9uIGVycm9ycyBhcmUgY29kZXMgdGhhdCBtYXRjaCB1cCB3aXRoIHRoZSBidWlsdC1pbgpMZW5kaW5nWWllbGRDb250cm9sbGVyRXJyb3IgZXJyb3IgcmVwb3J0aW5nLiBDVVNETWFuYWdlciBzcGVjaWZpYyBlcnJvcnMgc3RhcnQgYXQgMTAwAAAAAAAAABtMZW5kaW5nWWllbGRDb250cm9sbGVyRXJyb3IAAAAADAAAAAAAAAANSW50ZXJuYWxFcnJvcgAAAAAAAAEAAAAAAAAAF0FscmVhZHlJbml0aWFsaXplZEVycm9yAAAAAAMAAAAAAAAAEVVuYXV0aG9yaXplZEVycm9yAAAAAAAABAAAAAAAAAATTmVnYXRpdmVBbW91bnRFcnJvcgAAAAAIAAAAAAAAAAxCYWxhbmNlRXJyb3IAAAAKAAAAAAAAAA1PdmVyZmxvd0Vycm9yAAAAAAAADAAAAAAAAAAQVW5zdXBwb3J0ZWRBc3NldAAAA+gAAAAAAAAAEFlpZWxkVW5hdmFpbGFibGUAAAPpAAAAMU5vIHBlbmRpbmcgaGFydmVzdCBleGlzdHMgZm9yIHRoaXMgcHJvdG9jb2wvYXNzZXQAAAAAAAAQTm9QZW5kaW5nSGFydmVzdAAAA+oAAAA4QSBoYXJ2ZXN0IGlzIGFscmVhZHkgaW4gcHJvZ3Jlc3MgZm9yIHRoaXMgcHJvdG9jb2wvYXNzZXQAAAAYSGFydmVzdEFscmVhZHlJblByb2dyZXNzAAAD6wAAAChJbnZhbGlkIGhhcnZlc3Qgc3RhdGUgZm9yIHRoaXMgb3BlcmF0aW9uAAAAE0ludmFsaWRIYXJ2ZXN0U3RhdGUAAAAD7AAAAB1ObyB5aWVsZCBhdmFpbGFibGUgdG8gaGFydmVzdAAAAAAAABBOb1lpZWxkVG9IYXJ2ZXN0AAAD7Q==",
         "AAAAAgAAAAAAAAAAAAAAEFN1cHBvcnRlZEFkYXB0ZXIAAAACAAAAAAAAAAAAAAAMQmxlbmRDYXBpdGFsAAAAAQAAAAAAAAAGQ3VzdG9tAAAAAAABAAAAEQ==",
         "AAAAAgAAAAAAAAAAAAAAElN1cHBvcnRlZFlpZWxkVHlwZQAAAAAAAwAAAAAAAAAAAAAAB0xlbmRpbmcAAAAAAAAAAAAAAAAJTGlxdWlkaXR5AAAAAAAAAQAAAAAAAAAGQ3VzdG9tAAAAAAABAAAAEQ==" ]),
       options

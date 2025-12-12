@@ -12,6 +12,8 @@ export class YieldClaimerService {
   private readonly network: string;
   private readonly yieldDistributorClient: YieldDistributor.Client;
   private readonly yieldControllerClient: YieldController.Client;
+  private readonly protocol: string;
+  private readonly assetId: string;
   private readonly signer: {
     signTransaction: contract.SignTransaction;
     signAuthEntry: contract.SignAuthEntry;
@@ -30,6 +32,8 @@ export class YieldClaimerService {
       signTransaction: nodeSigner.signTransaction,
       signAuthEntry: nodeSigner.signAuthEntry,
     };
+    this.protocol = config.contracts.protocol;
+    this.assetId = config.contracts.assetId;
     this.yieldDistributorClient = new YieldDistributor.Client({
       contractId: config.contracts.yieldDistributorId,
       networkPassphrase: config.networkPassphrase,
@@ -50,7 +54,7 @@ export class YieldClaimerService {
     }
   }
 
-  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_12_HOURS)
+  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_MINUTE)
   async handleYieldClaim() {
     if (this.isProcessing) {
       this.logger.debug('Yield claim already in progress, skipping...');
@@ -111,29 +115,99 @@ export class YieldClaimerService {
 
 
 
+  /**
+   * Executes the 3-stage yield claiming process:
+   * 1. harvest_yield - Withdraw yield from the lending protocol
+   * 2. recompound_yield - Re-deposit yield back to the protocol
+   * 3. finalize_distribution - Issue cUSD and distribute to members
+   *
+   * Note: Soroban smart contract transactions can only have ONE operation per transaction,
+   * so these must be executed sequentially rather than bundled.
+   */
   async claimYield(): Promise<string | undefined> {
+    let finalizeResult: string | undefined;
+
+    // Stage 1: Harvest yield (withdraw from protocol)
     try {
-      const claimOp = await this.yieldControllerClient.claim_yield({
-      simulate: true 
-      });
-      if (claimOp.simulation) {
-        if(rpc.Api.isSimulationError(claimOp.simulation)) {
-          throw new Error(claimOp.simulation.error);
-        }
-        if (rpc.Api.isSimulationRestore(claimOp.simulation)) {
-          await claimOp.restoreFootprint(claimOp.simulation.restorePreamble);
-          return await this.claimYield(); // Recursive call after restore
-        }
-        if (rpc.Api.isSimulationSuccess(claimOp.simulation)) {
-          const response = await claimOp.signAndSend({ signTransaction: this.signer.signTransaction });
-          return response.sendTransactionResponse?.hash;
-        }
-      }
-      return undefined;
+      this.logger.log('Stage 1: Harvesting yield from protocol...');
+      const harvestResult = await this.executeContractCall(
+        () => this.yieldControllerClient.harvest_yield({
+          protocol: this.protocol,
+          asset: this.assetId,
+        }, { simulate: true }),
+        'harvest_yield'
+      );
+      this.logger.log(`Harvest complete. TX: ${harvestResult}`);
     } catch (error) {
-      this.logger.error('Error claiming yield:', error);
-      throw error;
+      this.logger.error('Stage 1 (harvest_yield) failed:', error);
     }
+
+    // Stage 2: Recompound yield (re-deposit to protocol)
+    try {
+      this.logger.log('Stage 2: Recompounding yield...');
+      const recompoundResult = await this.executeContractCall(
+        () => this.yieldControllerClient.recompound_yield({
+          protocol: this.protocol,
+          asset: this.assetId,
+        }, { simulate: true }),
+        'recompound_yield'
+      );
+      this.logger.log(`Recompound complete. TX: ${recompoundResult}`);
+    } catch (error) {
+      this.logger.error('Stage 2 (recompound_yield) failed:', error);
+    }
+
+    // Stage 3: Finalize distribution (issue cUSD and distribute)
+    try {
+      this.logger.log('Stage 3: Finalizing distribution...');
+      finalizeResult = await this.executeContractCall(
+        () => this.yieldControllerClient.finalize_distribution({
+          protocol: this.protocol,
+          asset: this.assetId,
+        }, { simulate: true }),
+        'finalize_distribution'
+      );
+      this.logger.log(`Distribution finalized. TX: ${finalizeResult}`);
+    } catch (error) {
+      this.logger.error('Stage 3 (finalize_distribution) failed:', error);
+    }
+
+    return finalizeResult;
+  }
+
+  /**
+   * Helper method to execute a contract call with simulation, restore footprint handling,
+   * and signing. Handles the common pattern for all Soroban contract interactions.
+   */
+  private async executeContractCall<T>(
+    contractCallFn: () => Promise<contract.AssembledTransaction<T>>,
+    operationName: string,
+  ): Promise<string | undefined> {
+    const assembledTx = await contractCallFn();
+
+    if (!assembledTx.simulation) {
+      throw new Error(`${operationName}: No simulation result`);
+    }
+
+    if (rpc.Api.isSimulationError(assembledTx.simulation)) {
+      throw new Error(`${operationName}: ${assembledTx.simulation.error}`);
+    }
+
+    if (rpc.Api.isSimulationRestore(assembledTx.simulation)) {
+      this.logger.log(`${operationName}: Restoring footprint...`);
+      await assembledTx.restoreFootprint(assembledTx.simulation.restorePreamble);
+      // Retry the operation after restore
+      return this.executeContractCall(contractCallFn, operationName);
+    }
+
+    if (rpc.Api.isSimulationSuccess(assembledTx.simulation)) {
+      const response = await assembledTx.signAndSend({
+        signTransaction: this.signer.signTransaction
+      });
+      return response.sendTransactionResponse?.hash;
+    }
+
+    return undefined;
   }
 
   async getDistributionDetails(): Promise<YieldDistributor.Distribution> {
