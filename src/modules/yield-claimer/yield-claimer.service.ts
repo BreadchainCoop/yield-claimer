@@ -6,6 +6,27 @@ import { rpc, contract } from '@stellar/stellar-sdk';
 import * as YieldDistributor from '@/packages/yield_distributor/src';
 import * as YieldController from '@/packages/lending_yield_controller/src';
 
+/** Contract error codes from lending_yield_controller */
+const ContractErrors: Record<number, string> = {
+  1000: 'The specified asset is not supported by this protocol.',
+  1001: 'Yield is currently unavailable for this protocol/asset.',
+  1002: 'No pending harvest exists. You must run harvest_yield before recompounding.',
+  1003: 'A harvest is already in progress for this protocol/asset.',
+  1004: 'Invalid harvest state for this operation.',
+  1005: 'No yield available to harvest at this time. The protocol has not accumulated any yield since the last harvest.',
+};
+
+/** Extract contract error code from Soroban HostError message */
+function getContractErrorMessage(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/Error\(Contract, #(\d+)\)/);
+  if (match) {
+    const code = parseInt(match[1], 10);
+    return ContractErrors[code] ?? null;
+  }
+  return null;
+}
+
 @Injectable()
 export class YieldClaimerService {
   private readonly logger = new Logger(YieldClaimerService.name);
@@ -24,7 +45,6 @@ export class YieldClaimerService {
     private readonly configService: ConfigService,
   ) {
     this.network = this.configService.get<string>('network')
-
     const config = this.configService.get<StellarNetworkConfig>(`cronService.${this.network}`);
     const keypair = YieldController.Keypair.fromSecret(config.walletSecretKey);
     const nodeSigner = contract.basicNodeSigner(keypair, config.rpcUrl);
@@ -54,7 +74,7 @@ export class YieldClaimerService {
     }
   }
 
-  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_MINUTE)
+  @Cron(process.env.CRON_EXPRESSION || CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleYieldClaim() {
     if (this.isProcessing) {
       this.logger.debug('Yield claim already in progress, skipping...');
@@ -139,7 +159,12 @@ export class YieldClaimerService {
       );
       this.logger.log(`Harvest complete. TX: ${harvestResult}`);
     } catch (error) {
-      this.logger.error('Stage 1 (harvest_yield) failed:', error);
+      const friendlyMessage = getContractErrorMessage(error);
+      if (friendlyMessage) {
+        this.logger.warn(`Stage 1 (harvest_yield): ${friendlyMessage}`);
+      } else {
+        this.logger.error('Stage 1 (harvest_yield) failed:', error);
+      }
     }
 
     // Stage 2: Recompound yield (re-deposit to protocol)
@@ -154,7 +179,12 @@ export class YieldClaimerService {
       );
       this.logger.log(`Recompound complete. TX: ${recompoundResult}`);
     } catch (error) {
-      this.logger.error('Stage 2 (recompound_yield) failed:', error);
+      const friendlyMessage = getContractErrorMessage(error);
+      if (friendlyMessage) {
+        this.logger.warn(`Stage 2 (recompound_yield): ${friendlyMessage}`);
+      } else {
+        this.logger.error('Stage 2 (recompound_yield) failed:', error);
+      }
     }
 
     // Stage 3: Finalize distribution (issue cUSD and distribute)
@@ -169,7 +199,12 @@ export class YieldClaimerService {
       );
       this.logger.log(`Distribution finalized. TX: ${finalizeResult}`);
     } catch (error) {
-      this.logger.error('Stage 3 (finalize_distribution) failed:', error);
+      const friendlyMessage = getContractErrorMessage(error);
+      if (friendlyMessage) {
+        this.logger.warn(`Stage 3 (finalize_distribution): ${friendlyMessage}`);
+      } else {
+        this.logger.error('Stage 3 (finalize_distribution) failed:', error);
+      }
     }
 
     return finalizeResult;
